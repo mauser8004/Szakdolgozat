@@ -1,0 +1,149 @@
+Ehhez kellett
+
+A Rpi-negy script 
+
+1kep10tipus.sh  
+
+Ez a script létrehozta a yolo8m mappa strutkuráját, és ea Rpi kamerájával készitett képekből 10 különbőző képet csinált elforgatott, szinek , háttér
+
+#!/bin/bash
+
+# ===== SESSION ID =====
+SESSION=$(date +"%Y%m%d_%H%M%S")
+BASE="dataset_$SESSION"
+
+TRAIN_IMG="$BASE/images/train"
+VAL_IMG="$BASE/images/val"
+LOGFILE="$BASE/capture.log"
+
+mkdir -p "$TRAIN_IMG" "$VAL_IMG"
+
+echo "Session: $SESSION" | tee -a "$LOGFILE"
+echo "Mentés ide: $BASE"
+
+# ===== 1 KÉP KÉSZÍTÉS =====
+TMP_PATH="/tmp/source.jpg"
+echo "$(date +"%H:%M:%S") [CAPTURE] source.jpg" | tee -a "$LOGFILE"
+rpicam-still -n -o "$TMP_PATH"
+
+# ===== 10 AUGMENTÁLT KÉP =====
+for i in $(seq 1 10)
+do
+    filename=$(printf "img_%05d.jpg" $i)
+
+    if (( i % 10 == 0 )); then
+        IMG_PATH="$VAL_IMG/$filename"
+        TYPE="VAL"
+    else
+        IMG_PATH="$TRAIN_IMG/$filename"
+        TYPE="TRAIN"
+    fi
+
+    echo "$(date +"%H:%M:%S") [$TYPE] $filename" | tee -a "$LOGFILE"
+
+    python3 << EOF
+import cv2
+import numpy as np
+import random
+
+img = cv2.imread("$TMP_PATH")
+
+# minden kép kap random augmentációt
+# rotáció
+if random.random() < 0.5:
+    img = cv2.rotate(img, random.choice([
+        cv2.ROTATE_90_CLOCKWISE,
+        cv2.ROTATE_180,
+        cv2.ROTATE_90_COUNTERCLOCKWISE
+    ]))
+
+# fényerő + kontraszt
+if random.random() < 0.7:
+    alpha = random.uniform(0.8, 1.3)
+    beta = random.randint(-30, 30)
+    img = cv2.convertScaleAbs(img, alpha=alpha, beta=beta)
+
+# flip
+if random.random() < 0.5:
+    img = cv2.flip(img, random.choice([-1,0,1]))
+
+# blur
+if random.random() < 0.3:
+    ksize = random.choice([3,5])
+    img = cv2.GaussianBlur(img, (ksize,ksize), 0)
+
+# hue shift
+if random.random() < 0.5:
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    shift = random.randint(-10,10)
+    hsv[:,:,0] = cv2.add(hsv[:,:,0], shift)
+    img = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+cv2.imwrite("$IMG_PATH", img)
+EOF
+
+done
+
+rm "$TMP_PATH"
+
+echo "Kész. 1 kép → 10 augmentált verzió."
+
+
+Ez a script mindig timestrappel készitette a mappákat , és a képeket , igy könnyen követhető volt hogy mi került yolo8m dataset mappájába a végén.
+
+Az igy elkészült képeket a PC -re kellet másolni a megfelelő mappa strukturát használva. 
+
+dataset/
+ ├── images/
+ │    ├── train/
+ │    └── val/
+ └── labels/
+      ├── train/
+      └── val/
+
+
+########################################################
+A PC -n telepiteni kellett:
+
+sudo apt update sudo apt install python3-pip python3-dev build-essential -y sudo apt install libatlas-base-dev -y
+
+python3 -m venv yolo_env source yolo_env/bin/activate
+### ez hogy csak CPU-t használjon a tanitáshoz
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+pip install ultralytics
+
+yolo checks
+
+első tanitás
+
+yolo detect train
+data=data.yaml
+model=yolov8n.pt
+epochs=80
+imgsz=960
+workers=8
+batch=8
+device=cpu
+
+miért ezek? param miért imgsz=960 kis objektum workers=8 Ryzen multi thread batch=8 CPU safe yolov8n CPU-n ez a legjobb
+
+teszt:
+yolo detect predict model=runs/detect/train/weights/best.pt source=teszt.jpg
+
+Ez után a best.pt kellet a Rpi-re visszamásolni.
+
+#########################################################x
+
+Rpi-n telepiteni, beállitani  kellett 
+
+sudo apt install python3-libcamera
+sudo apt install python3-picamera2
+python3 -m venv yolo_env --system-site-packages
+source yolo_env/bin/activate
+pip install ultralytics opencv-python
+python -c "from picamera2 import Picamera2; print('kamera ok')"
+python detect_ai_cam.py
+
+
+
