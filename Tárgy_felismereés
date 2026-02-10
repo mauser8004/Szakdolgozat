@@ -103,6 +103,22 @@ dataset/
 
 
 ########################################################
+Label mappaba az adatokat a  https://www.makesense.ai/ weboldalon csináltam  meg.
+
+Beimportáltam a képeket, és a labalezés után kiexportáltam oket. Fontos volt hogy mindig a megfelelő class -> label -t szerkesszem
+
+cat betanitas/data.yaml 
+path: dataset
+train: images/train
+val: images/val
+
+names:
+  0: csavar
+  1: doboz
+  2: kupak
+
+Azaz a weboldalon ebbe a sorrendbe kellett felvenni a labels-et!!!!
+
 A PC -n telepiteni kellett:
 
 sudo apt update sudo apt install python3-pip python3-dev build-essential -y sudo apt install libatlas-base-dev -y
