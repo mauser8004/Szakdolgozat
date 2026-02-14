@@ -179,3 +179,8 @@ psql (17.8 (Debian 17.8-0+deb13u1))
 Type "help" for help.
 
 targyfelismeres=#
+targyfelismeres=# CREATE TABLE detections (
+    id SERIAL PRIMARY KEY,
+    detected_at TIMESTAMP
+);
+CREATE TABLE
