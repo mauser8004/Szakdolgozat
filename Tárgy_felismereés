@@ -184,3 +184,75 @@ targyfelismeres=# CREATE TABLE detections (
     detected_at TIMESTAMP
 );
 CREATE TABLE
+postgres=# ALTER USER postgres WITH PASSWORD 'KJHG21fdsa';
+ALTER ROLE
+
+
+############################################################################
+
+cat detect_pbject_postgresql.py
+from ultralytics import YOLO
+from picamera2 import Picamera2
+import cv2
+import psycopg2
+from datetime import datetime
+
+# ===== YOLO =====
+model = YOLO("best.pt")
+
+# ===== Kamera =====
+picam2 = Picamera2()
+picam2.configure(
+    picam2.create_preview_configuration(
+        main={"format": 'BGR888', "size": (640,480)}
+    )
+)
+picam2.start()
+
+# ===== PostgreSQL kapcsolat =====
+conn = psycopg2.connect(
+    host="localhost",
+    database="targyfelismeres",
+    user="postgres",
+    password="KJHG21fdsa"
+)
+
+cur = conn.cursor()
+
+# ===== Állapot =====
+object_already_logged = False
+
+while True:
+    frame = picam2.capture_array()
+
+    results = model(frame, imgsz=640, device="cpu")
+    annotated = results[0].plot()
+
+    # van-e találat
+    detections = results[0].boxes
+
+    if detections is not None and len(detections) > 0:
+
+        if not object_already_logged:
+            print("Objektum találva -> mentés DB-be")
+
+            cur.execute(
+                "INSERT INTO detections (detected_at) VALUES (%s)",
+                (datetime.now(),)
+            )
+            conn.commit()
+
+            object_already_logged = True
+    else:
+        # ha eltűnt az objektum -> újra engedjük a mentést
+        object_already_logged = False
+
+    cv2.imshow("YOLO PI5 AI CAM", annotated)
+
+    if cv2.waitKey(1) == 27:
+        break
+
+cur.close()
+conn.close()
+cv2.destroyAllWindows()
+
