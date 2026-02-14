@@ -163,3 +163,19 @@ python detect_ai_cam.py
 pip install psycopg2-binary
 
 
+################################################################
+Adatabázis 
+sudo apt-get install postgresql-17
+(yolo_env) zoli@szakdol-pi:~/betanitas $ sudo su - postgres
+postgres@szakdol-pi:~$ psql 
+psql (17.8 (Debian 17.8-0+deb13u1))
+Type "help" for help.
+
+postgres=# create database targyfelismeres
+postgres-# ;
+CREATE DATABASE
+postgres@szakdol-pi:~$ psql targyfelismeres
+psql (17.8 (Debian 17.8-0+deb13u1))
+Type "help" for help.
+
+targyfelismeres=#
