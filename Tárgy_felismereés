@@ -179,11 +179,12 @@ psql (17.8 (Debian 17.8-0+deb13u1))
 Type "help" for help.
 
 targyfelismeres=#
-targyfelismeres=# CREATE TABLE detections (
+CREATE TABLE detections (
     id SERIAL PRIMARY KEY,
+    class_name TEXT,
+    confidence REAL,
     detected_at TIMESTAMP
 );
-CREATE TABLE
 postgres=# ALTER USER postgres WITH PASSWORD 'KJHG21fdsa';
 ALTER ROLE
 
