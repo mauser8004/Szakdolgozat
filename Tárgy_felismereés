@@ -198,10 +198,10 @@ import cv2
 import psycopg2
 from datetime import datetime
 
-# ===== YOLO =====
+# ===== MODEL =====
 model = YOLO("best.pt")
 
-# ===== Kamera =====
+# ===== CAMERA =====
 picam2 = Picamera2()
 picam2.configure(
     picam2.create_preview_configuration(
@@ -210,18 +210,17 @@ picam2.configure(
 )
 picam2.start()
 
-# ===== PostgreSQL kapcsolat =====
+# ===== POSTGRES =====
 conn = psycopg2.connect(
-    host="localhost",
-    database="targyfelismeres",
+    host="127.0.0.1",
+    dbname="targyfelismeres",
     user="postgres",
     password="KJHG21fdsa"
 )
-
 cur = conn.cursor()
 
-# ===== Állapot =====
-object_already_logged = False
+# ===== STATE =====
+previous_classes = set()
 
 while True:
     frame = picam2.capture_array()
@@ -229,26 +228,39 @@ while True:
     results = model(frame, imgsz=640, device="cpu")
     annotated = results[0].plot()
 
-    # van-e találat
-    detections = results[0].boxes
+    current_classes = set()
 
-    if detections is not None and len(detections) > 0:
+    if results[0].boxes is not None:
 
-        if not object_already_logged:
-            print("Objektum találva -> mentés DB-be")
+        boxes = results[0].boxes
+        names = model.names
 
-            cur.execute(
-                "INSERT INTO detections (detected_at) VALUES (%s)",
-                (datetime.now(),)
-            )
-            conn.commit()
+        for box in boxes:
 
-            object_already_logged = True
-    else:
-        # ha eltűnt az objektum -> újra engedjük a mentést
-        object_already_logged = False
+            class_id = int(box.cls[0])
+            class_name = names[class_id]
+            confidence = float(box.conf[0])
 
-    cv2.imshow("YOLO PI5 AI CAM", annotated)
+            current_classes.add(class_name)
+
+            # csak ha új class
+            if class_name not in previous_classes:
+
+                print(f"Új objektum: {class_name} ({confidence:.2f})")
+
+                cur.execute(
+                    """
+                    INSERT INTO detections
+                    (class_name, confidence, detected_at)
+                    VALUES (%s,%s,%s)
+                    """,
+                    (class_name, confidence, datetime.now())
+                )
+                conn.commit()
+
+    previous_classes = current_classes
+
+    cv2.imshow("YOLO PI5 AI CAM PRO", annotated)
 
     if cv2.waitKey(1) == 27:
         break
