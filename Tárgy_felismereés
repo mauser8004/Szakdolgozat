@@ -161,6 +161,7 @@ pip install ultralytics opencv-python
 python -c "from picamera2 import Picamera2; print('kamera ok')"
 python detect_ai_cam.py
 pip install psycopg2-binary
+pip install requests
 
 
 ################################################################
