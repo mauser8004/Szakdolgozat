@@ -192,17 +192,23 @@ ALTER ROLE
 
 ############################################################################
 
-cat detect_pbject_postgresql.py
-from ultralytics import YOLO
-from picamera2 import Picamera2
-import cv2
-import psycopg2
-from datetime import datetime
+cat detect_pbject_postgresql_curl_2.py
+# ==========================================================
+# YOLO + Raspberry Pi Camera + PostgreSQL + HTTP vezérlés
+# ==========================================================
 
-# ===== MODEL =====
+# ===== IMPORTOK =====
+from ultralytics import YOLO          # YOLO objektumdetektáló
+from picamera2 import Picamera2       # Raspberry Pi kamera
+import cv2                            # Képmegjelenítés
+import psycopg2                       # PostgreSQL kapcsolat
+from datetime import datetime         # Időbélyeg
+import requests                       # HTTP kérés (curl helyett)
+
+# ===== MODELL BETÖLTÉSE =====
 model = YOLO("best.pt")
 
-# ===== CAMERA =====
+# ===== KAMERA BEÁLLÍTÁS =====
 picam2 = Picamera2()
 picam2.configure(
     picam2.create_preview_configuration(
@@ -211,7 +217,7 @@ picam2.configure(
 )
 picam2.start()
 
-# ===== POSTGRES =====
+# ===== POSTGRESQL KAPCSOLAT =====
 conn = psycopg2.connect(
     host="127.0.0.1",
     dbname="targyfelismeres",
@@ -220,17 +226,28 @@ conn = psycopg2.connect(
 )
 cur = conn.cursor()
 
-# ===== STATE =====
-previous_classes = set()
+# ===== ÁLLAPOT VÁLTOZÓK =====
+previous_classes = set()     # Előző képkocka objektumai
+kupak_active = False         # Jelenleg érzékelünk-e kupakot?
 
+# ==========================================================
+# FŐ CIKLUS
+# ==========================================================
 while True:
+
+    # Kamera képkocka beolvasása
     frame = picam2.capture_array()
 
+    # YOLO detektálás futtatása
     results = model(frame, imgsz=640, device="cpu")
+
+    # Annotált kép (dobozokkal)
     annotated = results[0].plot()
 
     current_classes = set()
+    kupak_found = False  # Ebben a frame-ben van-e kupak
 
+    # Ha vannak detektált objektumok
     if results[0].boxes is not None:
 
         boxes = results[0].boxes
@@ -244,7 +261,7 @@ while True:
 
             current_classes.add(class_name)
 
-            # csak ha új class
+            # ===== ÚJ OBJEKTUM MENTÉSE ADATBÁZISBA =====
             if class_name not in previous_classes:
 
                 print(f"Új objektum: {class_name} ({confidence:.2f})")
@@ -259,13 +276,50 @@ while True:
                 )
                 conn.commit()
 
+            # ===== KUPAK ELLENŐRZÉS =====
+            if class_name.lower() == "kupak":
+                kupak_found = True
+
+
+    # ======================================================
+    # HTTP VEZÉRLÉS (ÁLLAPOTVÁLTÁS ALAPJÁN)
+    # ======================================================
+
+    # Ha kupak megjelent és eddig nem volt aktív
+    if kupak_found and not kupak_active:
+        try:
+            print("Kupak érzékelve → H meghívása")
+            response = requests.get("http://192.168.0.20/H", timeout=2)
+            print("HTTP státusz:", response.status_code)
+            kupak_active = True
+        except Exception as e:
+            print("Hiba a H kérésnél:", e)
+
+    # Ha nincs kupak és eddig aktív volt
+    elif not kupak_found and kupak_active:
+        try:
+            print("Kupak eltűnt → L meghívása")
+            response = requests.get("http://192.168.0.20/L", timeout=2)
+            print("HTTP státusz:", response.status_code)
+            kupak_active = False
+        except Exception as e:
+            print("Hiba az L kérésnél:", e)
+
+
+    # Előző frame frissítése
     previous_classes = current_classes
 
+    # Kép megjelenítése
     cv2.imshow("YOLO PI5 AI CAM PRO", annotated)
 
+    # Kilépés ESC-re
     if cv2.waitKey(1) == 27:
         break
 
+
+# ==========================================================
+# LEZÁRÁS
+# ==========================================================
 cur.close()
 conn.close()
 cv2.destroyAllWindows()
